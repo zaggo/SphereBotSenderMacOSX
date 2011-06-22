@@ -29,12 +29,10 @@
 @implementation ViewController
 
 @synthesize gcode, sendingFile;
+@dynamic canSendLine;
 
 - (void)awakeFromNib
 {
-	
-	[sendButton setEnabled:NO];
-	
 	/// set up notifications
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(didAddPorts:) name:AMSerialPortListDidAddPortsNotification object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(didRemovePorts:) name:AMSerialPortListDidRemovePortsNotification object:nil];
@@ -64,6 +62,7 @@
 
 - (void)initPort
 {
+    [self willChangeValueForKey:@"canSendLine"];
 	NSString *deviceName = [serialSelectMenu titleOfSelectedItem];
 	if (![deviceName isEqualToString:[port bsdPath]]) {
 		[port close];
@@ -77,7 +76,6 @@
 			NSLog(@"successfully connected");
 			
 			[connectButton setEnabled:NO];
-			[sendButton setEnabled:YES];
 			[serialScreenMessage setStringValue:@"Connection Successful!"];
 			
 			//TODO: Set appropriate baud rate here. 
@@ -101,9 +99,17 @@
 			
 		}
 	}
+    [self didChangeValueForKey:@"canSendLine"];
 }
 
++ (NSSet *)keyPathsForValuesAffectingCanSendLine {
+    return [NSSet setWithObjects:@"sendingFile", nil];
+}
 
+- (BOOL)canSendLine
+{
+    return [port isOpen] && !sendingFile;
+}
 
 
 - (void)serialPortReadData:(NSDictionary *)dataDictionary
@@ -160,7 +166,7 @@
 
 - (void)sendNextLine:(NSString*)response
 {
-	if([response hasPrefix:@"ok:"])
+	if([response hasPrefix:@"ok"])
 	{
 		if([port isOpen]) {
 			NSString* line=nil;
@@ -186,7 +192,33 @@
 			}
 		}
 	}
-	else
+	else if([response hasPrefix:@"rs"]) // TODO Resend
+    {
+		if([port isOpen]) {
+			NSString* line=nil;
+			do
+			{
+				line = [gcode objectAtIndex:lineIndex++];
+			} while(line.length==0 && lineIndex<gcode.count);
+			if(line.length>0 && sendingFile)
+			{
+				[sendFileMessage setStringValue:[NSString stringWithFormat:@"Sending Line %d: %@", lineIndex-1, line]];
+				NSString *sendString = [line stringByAppendingString:@"\n"];
+				[port writeString:sendString usingEncoding:NSUTF8StringEncoding error:NULL];
+			}
+			if(lineIndex>=gcode.count)
+			{
+				[sendFileMessage setStringValue:@"File sent complete"];
+				self.sendingFile = NO;
+			}
+			else if(!sendingFile)
+			{
+				[sendFileMessage setStringValue:@"File sent abort"];
+				[port writeString:@"M18\n" usingEncoding:NSUTF8StringEncoding error:NULL];
+			}
+		}
+    }
+    else
 	{
 		self.sendingFile = NO;
 		[sendFileMessage setStringValue:[NSString stringWithFormat:@"Error at line %d: %@", lineIndex-1, response]];

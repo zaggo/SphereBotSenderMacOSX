@@ -23,7 +23,8 @@
 #import <Cocoa/Cocoa.h>
 #import "AMSerialPort.h"
 
-@interface ViewController : NSObject {
+@interface ViewController : NSObject
+{
 
 	AMSerialPort *port;
 	
@@ -41,6 +42,7 @@
 
 @property (retain) NSArray* gcode;
 @property (assign) BOOL sendingFile;
+@property (readonly) BOOL canSendLine;
 
 // Interface Methods
 - (IBAction)attemptConnect:(id)sender;
